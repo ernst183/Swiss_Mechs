@@ -1,0 +1,142 @@
+#include "littlegui.h"
+#include "ui_littlegui.h"
+#include "QMessageBox"
+#include "opencv2/opencv.hpp"
+#include "QBitmap"
+#include <math.h>
+
+LittleGui::LittleGui( QWidget *parent ) : QDialog( parent ),
+	ui( new Ui::LittleGui )
+{
+	ui->setupUi( this );
+	cv::Mat mat;
+}
+
+LittleGui::~LittleGui( )
+{
+	delete ui;
+}
+
+void LittleGui::on_liveImage_clicked( )
+{
+	cv::VideoCapture cap( 0 );
+
+	// Create mat with alpha channel
+	if( !cap.isOpened( ) ) // check if we succeeded
+		return;
+
+    cv::Mat edges, src, src_gray, src_hsv;//, redl, redh, red, green;
+	cv::namedWindow( "edges", 1 );
+
+	for( ; ; )
+	{
+
+        cap >> src; // get a new frame from camera
+		if( !src.data )
+		{
+			return;
+		}
+
+		/// Convert it to gray
+		cv::cvtColor( src, src_gray, CV_BGR2GRAY );
+
+        /// Blur image to reduce noise
+        cv::GaussianBlur(src_gray, src_gray, cv::Size(9,9), 2, 2);
+
+		/// Convert it to HSV
+		cv::cvtColor( src, src_hsv, CV_BGR2HSV );
+
+		/// Reduce the noise so we avoid false circle detection
+        cv::GaussianBlur( src_gray, src_gray, cv::Size(3,3), 1, 1 );
+
+		cv::vector < cv::Vec3f > circles;
+
+		/// Apply the Hough Transform to find the circles
+        cv::HoughCircles( src_gray, circles, CV_HOUGH_GRADIENT, 1, src_gray.rows / 8, 45, 24, src_gray.rows / 10, 0 );
+
+		/// Draw the circles detected
+		for( size_t i = 0; i < circles.size( ); i++ )
+		{
+			bool red_ball = false;
+			bool green_ball = false;
+
+			// circle center
+			cv::Point center( cvRound( circles[ i ][ 0 ] ), cvRound( circles[ i ][ 1 ] ) );
+			int radius = cvRound( circles[ i ][ 2 ] );
+			int red = 0;
+			int green = 0;
+			int other = 0;
+
+
+			for( int j = 0; j < 10; j++ )
+			{
+                float x = circles[ i ][ 0 ];
+                float y = circles[ i ][ 1 ];
+				cv::Vec3b pixel_sample = src_hsv.at < cv::Vec3b > ( y, x ); //vec = [r,g,b]
+				float hue = pixel_sample[ 0 ];
+
+                if( (hue >= 0 && hue < 10) || (hue > 175) )
+				{
+					red++;
+				}
+				else if( hue > 30 && hue < 165 )
+				{
+					green++;
+				}
+				else
+				{
+					other++;
+				}
+
+				//sample from within radius
+			}
+
+			if( red >= green )
+			{
+				red_ball = true;
+			}
+			else if( green > red )
+			{
+				green_ball = true;
+			}
+            else
+            {
+                red_ball = true;
+            }
+
+			if( red_ball == true )
+			{
+				circle( src, center, 3, cv::Scalar( 0, 0, 255 ), -1, 8, 0 );
+
+				// circle outline
+				circle( src, center, radius, cv::Scalar( 0, 0, 255 ), 3, 8, 0 );
+			}
+			else if( green_ball == true )
+			{
+				circle( src, center, 3, cv::Scalar( 0, 255, 0 ), -1, 8, 0 );
+
+				// circle outline
+				circle( src, center, radius, cv::Scalar( 0, 255, 0 ), 3, 8, 0 );
+			}
+		}
+
+//        // Pull out the green component
+//        cv::inRange( src_hsv, cv::Scalar( 60, 50, 50 ), cv::Scalar( 90, 255, 255 ), green );
+//        cv::erode( green, green, cv::getStructuringElement( cv::MORPH_ELLIPSE, cv::Size( 5, 5 ) ) );
+//        cv::dilate( green, green, cv::getStructuringElement( cv::MORPH_ELLIPSE, cv::Size( 5, 5 ) ) );
+
+//        // Pull out and combine back together the two red components
+//        cv::inRange( src_hsv, cv::Scalar( 0, 50, 50 ), cv::Scalar(10, 255, 255), redl);
+//        cv::inRange( src_hsv, cv::Scalar( 170, 50, 50 ), cv::Scalar(179, 255, 255), redh);
+//        cv::max(redl, redh, red);
+//        cv::erode( red, red, cv::getStructuringElement( cv::MORPH_ELLIPSE, cv::Size( 5, 5 ) ) );
+//        cv::dilate( red, red, cv::getStructuringElement( cv::MORPH_ELLIPSE, cv::Size( 5, 5 ) ) );
+        cv::imshow( "edges", src ); //or green
+
+        if( cv::waitKey( 30 ) >= 0 )
+			break;
+	}
+
+	// the camera will be deinitialized automatically in VideoCapture destructor
+	return;
+} // on_liveImage_clicked

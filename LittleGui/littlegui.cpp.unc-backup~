@@ -1,0 +1,129 @@
+#include "littlegui.h"
+#include "ui_littlegui.h"
+#include "QMessageBox"
+#include "opencv2/opencv.hpp"
+#include "QBitmap"
+#include <math.h>
+
+
+LittleGui::LittleGui( QWidget *parent ) : QDialog( parent ),
+	ui( new Ui::LittleGui )
+{
+	ui->setupUi( this );
+	cv::Mat mat;
+}
+
+LittleGui::~LittleGui( )
+{
+	delete ui;
+}
+
+void LittleGui::on_liveImage_clicked( )
+{
+
+
+	QMessageBox::information( this, "First handler", "Hello!" );
+	cv::VideoCapture cap( 0 );
+
+    // Create mat with alpha channel
+    if(!cap.isOpened())  // check if we succeeded
+        return;
+    cv::Mat edges;
+    cv::namedWindow("edges",1);
+    for(;;)
+    {
+          cv::Mat frame;
+          cap >> frame; // get a new frame from camera
+          cv::cvtColor(frame, edges, CV_BGR2GRAY);
+          cv::GaussianBlur(edges, edges, cv::Size(7,7), 1.5, 1.5);
+          cv::Canny(edges, edges, 0, 30, 3);
+          cv::Mat src, src_gray, src_hsv;
+
+          /// Read the image
+          src = frame;
+
+          if( !src.data )
+            { return; }
+
+          /// Convert it to gray
+          cv::cvtColor( src, src_gray, CV_BGR2GRAY );
+          /// Convert it to HSV
+          cv::cvtColor( src, src_hsv, CV_BGR2HSV );
+          /// Reduce the noise so we avoid false circle detection
+          cv::GaussianBlur( src_gray, src_gray, cv::Size(9, 9), 2, 2 );
+
+          cv::vector<cv::Vec3f> circles;
+
+          /// Apply the Hough Transform to find the circles
+          cv::HoughCircles( src_gray, circles, CV_HOUGH_GRADIENT, 2, src_gray.rows/8, 200, 100, 0, 0 );
+          /// Draw the circles detected
+          for( size_t i = 0; i < circles.size(); i++ )
+          {
+              bool red_ball = false;
+              bool green_ball = false;
+              // circle center
+              cv::Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+              int radius = cvRound(circles[i][2]);
+              int red = 0;
+              int green = 0;
+              int other = 0;
+              float step = radius/5.0;
+              for( int j = 0; j < 10; j++)
+              {
+                  float x = circles[i][0] - radius;
+                  float y = circles[i][1] - radius;
+                  cv::Vec3b pixel_sample = src_hsv.at<cv::Vec3b>( y, x ); //vec = [r,g,b]
+                  float hue = pixel_sample[0];
+                  std::cout << hue << std::endl;
+                  if(hue >= 0 && hue < 10 || hue > 175)
+                  {
+                      red++;
+                  }
+                  else if (hue > 30 && hue < 165)
+                  {
+                      green++;
+                  }
+                  else
+                  {
+                      other ++;
+                  }
+                  x += step;
+                  y += step;
+
+                  //sample from within radius
+
+              }
+              if(red >= green)
+              {
+                  red_ball = true;
+              }
+              else if(green > red)
+              {
+                  green_ball = true;
+              }
+              if(red_ball == true)
+              {
+                  circle( src, center, 3, cv::Scalar(0,0,255), -1, 8, 0 );
+                  // circle outline
+                  circle( src, center, radius, cv::Scalar(0,0,255), 3, 8, 0 );
+              }
+              else if(green_ball == true)
+              {
+                  circle( src, center, 3, cv::Scalar(0,255,0), -1, 8, 0 );
+                  // circle outline
+                  circle( src, center, radius, cv::Scalar(0,255,0), 3, 8, 0 );
+              }
+          }
+
+          cv::imshow( "edges", frame );
+
+
+          if(cv::waitKey(30) >= 0) break;
+    }
+    // the camera will be deinitialized automatically in VideoCapture destructor
+    return;
+
+} // on_liveImage_clicked
+
+
+
